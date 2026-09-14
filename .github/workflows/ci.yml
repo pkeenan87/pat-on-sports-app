@@ -5,16 +5,61 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
+    name: Lint / typecheck / test / export
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test -- --ci --coverage=false
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test -- --ci --coverage=false
+
+      - name: Export iOS bundle
+        # Proves the app bundles end to end, the closest CI can get to a build
+        # without EAS credentials.
+        run: npx expo export --platform ios
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Critical, not high: react-native-markdown-display pins markdown-it 10,
+      # whose linkify-it dependency carries two high ReDoS advisories with no
+      # patched release upstream (GHSA-22p9-wv53-3rq4, GHSA-v245-v573-v5vm).
+      # The app only renders Markdown from patonsports.com, never user input,
+      # so the exposure is the author's own posts. Raise back to high once
+      # linkify-it ships a fix and the renderer picks it up.
+      - name: npm audit (critical)
+        run: npm audit --audit-level=critical
