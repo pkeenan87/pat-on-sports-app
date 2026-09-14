@@ -46,17 +46,23 @@ export default function RootLayout() {
     IBMPlexSans_600SemiBold,
   });
 
+  // A font that fails to load is not fatal: React Native falls back to the
+  // system font for an unknown family, so render anyway and log.
+  const ready = loaded || Boolean(error);
+
   useEffect(() => {
-    if (error) throw error;
+    if (error) {
+      console.warn("Brand fonts failed to load; using system fonts.", error);
+    }
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
+    if (ready) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [ready]);
 
-  if (!loaded) {
+  if (!ready) {
     return null;
   }
 
