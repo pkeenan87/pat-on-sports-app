@@ -1,11 +1,20 @@
 import { SymbolView } from "expo-symbols";
 import { Tabs } from "expo-router";
+import { BottomTabBar } from "expo-router/build/react-navigation/bottom-tabs";
+import { View } from "react-native";
 
+import { MiniPlayer } from "@/src/components/MiniPlayer";
 import { colors } from "@/src/theme/colors";
 
 export default function TabLayout() {
   return (
     <Tabs
+      tabBar={(props) => (
+        <View>
+          <MiniPlayer />
+          <BottomTabBar {...props} />
+        </View>
+      )}
       screenOptions={{
         tabBarActiveTintColor: colors.red,
         tabBarInactiveTintColor: colors.navyMuted,

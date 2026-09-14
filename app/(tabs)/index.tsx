@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { CategoryFilter } from "@/src/components/CategoryFilter";
+import { ContinueListeningCard } from "@/src/components/ContinueListeningCard";
 import { ErrorState } from "@/src/components/ErrorState";
 import { ManifestBanner } from "@/src/components/ManifestBanner";
 import { OfflineIndicator } from "@/src/components/OfflineIndicator";
@@ -148,6 +149,8 @@ export default function LatestScreen() {
             }}
           />
         ) : null}
+
+        <ContinueListeningCard posts={data?.posts ?? []} />
 
         <CategoryFilter selected={category} onSelect={setCategory} />
 

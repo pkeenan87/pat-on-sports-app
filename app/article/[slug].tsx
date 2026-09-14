@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { ArticleAudioPlayer } from "@/src/components/ArticleAudioPlayer";
 import { ArticleMarkdown } from "@/src/components/ArticleMarkdown";
 import { CategoryChip } from "@/src/components/CategoryChip";
 import { ErrorState } from "@/src/components/ErrorState";
@@ -130,6 +131,18 @@ export default function ArticleScreen() {
               ? ` · Week ${data.week}${data.season ? ` · ${data.season}` : ""}`
               : ""}
         </Text>
+
+        {data.audio ? (
+          <ArticleAudioPlayer
+            track={{
+              slug: data.slug,
+              title: data.title,
+              heroImage: data.heroImage,
+              audioUrl: data.audio,
+              durationSeconds: data.audioDurationSeconds,
+            }}
+          />
+        ) : null}
 
         {opponents.length > 0 ? (
           <View style={styles.tags}>
