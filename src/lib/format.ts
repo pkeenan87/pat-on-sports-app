@@ -71,9 +71,14 @@ export function groupPostsBySeason(
   }));
 }
 
+/**
+ * Search title, description, tags, opponent, category, and optionally cached
+ * article Markdown bodies keyed by slug.
+ */
 export function filterPostsByQuery(
   posts: ApiPostSummary[],
-  query: string
+  query: string,
+  cachedBodies: Record<string, string> = {}
 ): ApiPostSummary[] {
   const q = query.trim().toLowerCase();
   if (!q) return posts;
@@ -84,6 +89,7 @@ export function filterPostsByQuery(
       ...post.tags,
       post.opponent ?? "",
       post.category.label,
+      cachedBodies[post.slug] ?? "",
     ]
       .join(" ")
       .toLowerCase();

@@ -33,6 +33,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Expo doctor
+        run: npx expo-doctor
+
       - name: Test
         run: npm test -- --ci --coverage=false
 

@@ -8,14 +8,17 @@ import {
   View,
 } from "react-native";
 
+import { ErrorState } from "@/src/components/ErrorState";
+import { OfflineIndicator } from "@/src/components/OfflineIndicator";
 import { PostCard } from "@/src/components/PostCard";
-import { usePostsFeed } from "@/src/hooks/usePosts";
+import { useCachedBodies, usePostsFeed } from "@/src/hooks/usePosts";
 import {
   filterPostsByQuery,
   groupPostsBySeason,
   is2025RunPost,
 } from "@/src/lib/format";
 import type { ApiPostSummary } from "@/src/lib/api";
+import { shouldShowOfflineEmptyState } from "@/src/lib/queryState";
 import { colors } from "@/src/theme/colors";
 
 type Row =
@@ -23,15 +26,28 @@ type Row =
   | { type: "post"; key: string; post: ApiPostSummary };
 
 export default function ArchiveScreen() {
-  const { data, isLoading, isError, error } = usePostsFeed();
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isServingFromCache,
+    isPending,
+    fetchStatus,
+  } = usePostsFeed();
+  const cachedBodies = useCachedBodies();
   const [query, setQuery] = useState("");
 
   const rows = useMemo(() => {
-    const filtered = filterPostsByQuery(data?.posts ?? [], query);
-    const runShelf =
-      !query.trim()
-        ? filtered.filter(is2025RunPost).slice(0, 8)
-        : [];
+    const filtered = filterPostsByQuery(
+      data?.posts ?? [],
+      query,
+      cachedBodies.data ?? {}
+    );
+    const runShelf = !query.trim()
+      ? filtered.filter(is2025RunPost).slice(0, 8)
+      : [];
     const bySeason = groupPostsBySeason(filtered);
     const next: Row[] = [];
 
@@ -58,7 +74,19 @@ export default function ArchiveScreen() {
     }
 
     return next;
-  }, [data?.posts, query]);
+  }, [data?.posts, query, cachedBodies.data]);
+
+  if (shouldShowOfflineEmptyState({ data, isPending, fetchStatus })) {
+    return (
+      <ErrorState
+        title="You’re offline"
+        message="Connect once to download the archive, then you can search cached articles offline."
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
+  }
 
   if (isLoading && !data) {
     return (
@@ -68,24 +96,26 @@ export default function ArchiveScreen() {
     );
   }
 
-  if (isError) {
+  if (isError && !data) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorTitle}>Couldn’t load archive</Text>
-        <Text style={styles.errorBody}>
-          {error instanceof Error ? error.message : "Unknown error"}
-        </Text>
-      </View>
+      <ErrorState
+        title="Couldn’t load archive"
+        message={error instanceof Error ? error.message : "Unknown error"}
+        onRetry={() => {
+          void refetch();
+        }}
+      />
     );
   }
 
   return (
     <View style={styles.screen}>
+      <OfflineIndicator visible={Boolean(isServingFromCache)} />
       <View style={styles.searchWrap}>
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search title, description, tags…"
+          placeholder="Search title, description, tags, body…"
           placeholderTextColor="rgba(27, 54, 84, 0.45)"
           style={styles.search}
           autoCorrect={false}
@@ -93,9 +123,6 @@ export default function ArchiveScreen() {
           clearButtonMode="while-editing"
           accessibilityLabel="Search archive"
         />
-        <Text style={styles.hint}>
-          Body search arrives with offline cache in Phase 2.
-        </Text>
       </View>
       <FlatList
         data={rows}
@@ -138,11 +165,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.navy,
   },
-  hint: {
-    fontFamily: "IBMPlexSans_400Regular",
-    fontSize: 12,
-    color: colors.navyMuted,
-  },
   list: {
     padding: 16,
     paddingBottom: 40,
@@ -163,17 +185,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     padding: 24,
     gap: 8,
-  },
-  errorTitle: {
-    fontFamily: "BarlowCondensed_700Bold",
-    fontSize: 22,
-    color: colors.navy,
-  },
-  errorBody: {
-    fontFamily: "IBMPlexSans_400Regular",
-    fontSize: 14,
-    color: colors.navyMuted,
-    textAlign: "center",
   },
   empty: {
     fontFamily: "IBMPlexSans_400Regular",

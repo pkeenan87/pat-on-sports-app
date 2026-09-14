@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -9,19 +10,69 @@ import {
 } from "react-native";
 
 import { CategoryFilter } from "@/src/components/CategoryFilter";
+import { ErrorState } from "@/src/components/ErrorState";
+import { ManifestBanner } from "@/src/components/ManifestBanner";
+import { OfflineIndicator } from "@/src/components/OfflineIndicator";
 import { PostCard } from "@/src/components/PostCard";
-import { usePostsFeed } from "@/src/hooks/usePosts";
+import { useManifest, usePostsFeed } from "@/src/hooks/usePosts";
 import {
   filterPostsByCategory,
   is2025RunPost,
   type CategoryLabel,
 } from "@/src/lib/format";
+import { shouldShowManifestBanner } from "@/src/lib/manifest";
+import { shouldShowOfflineEmptyState } from "@/src/lib/queryState";
 import { colors } from "@/src/theme/colors";
 
+function bannerStorageKey(message: string): string {
+  // Simple stable key from the message text (not a crypto hash).
+  let hash = 0;
+  for (let i = 0; i < message.length; i += 1) {
+    hash = (hash * 31 + message.charCodeAt(i)) | 0;
+  }
+  return `manifest-banner-dismissed:${hash}`;
+}
+
 export default function LatestScreen() {
-  const { data, isLoading, isError, error, refetch, isRefetching } =
-    usePostsFeed();
+  const feed = usePostsFeed();
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+    isServingFromCache,
+    isPending,
+    fetchStatus,
+  } = feed;
+  const manifest = useManifest();
   const [category, setCategory] = useState<CategoryLabel | "All">("All");
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const bannerMessage = manifest.data?.message?.trim() || null;
+  const bannerKey = useMemo(
+    () => (bannerMessage ? bannerStorageKey(bannerMessage) : null),
+    [bannerMessage]
+  );
+
+  useEffect(() => {
+    if (!bannerKey) return;
+    let cancelled = false;
+    void AsyncStorage.getItem(bannerKey).then((value) => {
+      if (!cancelled && value === "1") {
+        setBannerDismissed(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bannerKey]);
+
+  const showBanner =
+    Boolean(manifest.data) &&
+    shouldShowManifestBanner(manifest.data!) &&
+    !bannerDismissed;
 
   const { featured, rest, from2025 } = useMemo(() => {
     const posts = filterPostsByCategory(data?.posts ?? [], category);
@@ -36,6 +87,18 @@ export default function LatestScreen() {
     };
   }, [data?.posts, category]);
 
+  if (shouldShowOfflineEmptyState({ data, isPending, fetchStatus })) {
+    return (
+      <ErrorState
+        title="You’re offline"
+        message="Connect once to download the feed, then you can read cached articles offline."
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
+  }
+
   if (isLoading && !data) {
     return (
       <View style={styles.centered}>
@@ -44,66 +107,81 @@ export default function LatestScreen() {
     );
   }
 
-  if (isError) {
+  if (isError && !data) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorTitle}>Couldn’t load posts</Text>
-        <Text style={styles.errorBody}>
-          {error instanceof Error ? error.message : "Unknown error"}
-        </Text>
-      </View>
+      <ErrorState
+        title="Couldn’t load posts"
+        message={error instanceof Error ? error.message : "Unknown error"}
+        onRetry={() => {
+          void refetch();
+        }}
+      />
     );
   }
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefetching}
-          onRefresh={() => {
-            void refetch();
-          }}
-          tintColor={colors.navy}
-        />
-      }
-    >
-      <Text style={styles.brand}>Pat on Sports</Text>
-      <Text style={styles.lede}>Weekly recaps, without the noise.</Text>
+    <View style={styles.screen}>
+      <OfflineIndicator visible={Boolean(isServingFromCache)} />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              void refetch();
+            }}
+            tintColor={colors.navy}
+          />
+        }
+      >
+        <Text style={styles.brand}>Pat on Sports</Text>
+        <Text style={styles.lede}>Weekly recaps, without the noise.</Text>
 
-      <CategoryFilter selected={category} onSelect={setCategory} />
+        {showBanner && bannerMessage ? (
+          <ManifestBanner
+            message={bannerMessage}
+            onDismiss={() => {
+              setBannerDismissed(true);
+              if (bannerKey) {
+                void AsyncStorage.setItem(bannerKey, "1");
+              }
+            }}
+          />
+        ) : null}
 
-      {featured ? (
-        <View style={styles.section}>
-          <PostCard post={featured} featured />
-        </View>
-      ) : (
-        <Text style={styles.empty}>No posts in this category yet.</Text>
-      )}
+        <CategoryFilter selected={category} onSelect={setCategory} />
 
-      {rest.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Latest</Text>
-          <View style={styles.stack}>
-            {rest.map((post) => (
-              <PostCard key={post.slug} post={post} />
-            ))}
+        {featured ? (
+          <View style={styles.section}>
+            <PostCard post={featured} featured />
           </View>
-        </View>
-      ) : null}
+        ) : (
+          <Text style={styles.empty}>No posts in this category yet.</Text>
+        )}
 
-      {from2025.length > 0 && category === "All" ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>From the 2025 run</Text>
-          <View style={styles.stack}>
-            {from2025.map((post) => (
-              <PostCard key={post.slug} post={post} />
-            ))}
+        {rest.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Latest</Text>
+            <View style={styles.stack}>
+              {rest.map((post) => (
+                <PostCard key={post.slug} post={post} />
+              ))}
+            </View>
           </View>
-        </View>
-      ) : null}
-    </ScrollView>
+        ) : null}
+
+        {from2025.length > 0 && category === "All" ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>From the 2025 run</Text>
+            <View style={styles.stack}>
+              {from2025.map((post) => (
+                <PostCard key={post.slug} post={post} />
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -149,17 +227,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     padding: 24,
     gap: 8,
-  },
-  errorTitle: {
-    fontFamily: "BarlowCondensed_700Bold",
-    fontSize: 22,
-    color: colors.navy,
-  },
-  errorBody: {
-    fontFamily: "IBMPlexSans_400Regular",
-    fontSize: 14,
-    color: colors.navyMuted,
-    textAlign: "center",
   },
   empty: {
     fontFamily: "IBMPlexSans_400Regular",
