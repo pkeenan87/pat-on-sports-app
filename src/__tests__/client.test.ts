@@ -1,8 +1,13 @@
 import {
+  apiManifestSchema,
   apiPostDetailSchema,
   apiPostsFeedSchema,
 } from "../../src/lib/api";
-import { fetchPostDetail, fetchPostsFeed } from "../../src/lib/client";
+import {
+  fetchManifest,
+  fetchPostDetail,
+  fetchPostsFeed,
+} from "../../src/lib/client";
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -53,6 +58,14 @@ const sampleDetail = {
   related: ["other-slug"],
 };
 
+const sampleManifest = {
+  schemaVersion: 1,
+  minSupportedSchemaVersion: 1,
+  commentsApiBase: null,
+  message: null,
+  site: "https://patonsports.com",
+};
+
 describe("API client", () => {
   it("validates and returns the posts feed", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(jsonResponse(sampleFeed));
@@ -79,6 +92,15 @@ describe("API client", () => {
       `https://patonsports.com/api/v1/posts/${sampleSummary.slug}.json`
     );
     expect(apiPostDetailSchema.parse(post).prosCons?.hasPanels).toBe(true);
+  });
+
+  it("validates and returns the manifest", async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse(sampleManifest));
+    const manifest = await fetchManifest(fetchImpl);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://patonsports.com/api/v1/manifest.json"
+    );
+    expect(apiManifestSchema.parse(manifest).minSupportedSchemaVersion).toBe(1);
   });
 
   it("surfaces HTTP errors", async () => {

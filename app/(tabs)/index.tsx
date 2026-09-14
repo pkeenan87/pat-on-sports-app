@@ -9,19 +9,30 @@ import {
 } from "react-native";
 
 import { CategoryFilter } from "@/src/components/CategoryFilter";
+import { ErrorState } from "@/src/components/ErrorState";
+import { ManifestBanner } from "@/src/components/ManifestBanner";
+import { OfflineIndicator } from "@/src/components/OfflineIndicator";
 import { PostCard } from "@/src/components/PostCard";
-import { usePostsFeed } from "@/src/hooks/usePosts";
+import { useManifest, usePostsFeed } from "@/src/hooks/usePosts";
 import {
   filterPostsByCategory,
   is2025RunPost,
   type CategoryLabel,
 } from "@/src/lib/format";
+import { shouldShowManifestBanner } from "@/src/lib/manifest";
 import { colors } from "@/src/theme/colors";
 
 export default function LatestScreen() {
-  const { data, isLoading, isError, error, refetch, isRefetching } =
+  const { data, isLoading, isError, error, refetch, isRefetching, isServingFromCache } =
     usePostsFeed();
+  const manifest = useManifest();
   const [category, setCategory] = useState<CategoryLabel | "All">("All");
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const showBanner =
+    Boolean(manifest.data) &&
+    shouldShowManifestBanner(manifest.data!) &&
+    !bannerDismissed;
 
   const { featured, rest, from2025 } = useMemo(() => {
     const posts = filterPostsByCategory(data?.posts ?? [], category);
@@ -44,66 +55,76 @@ export default function LatestScreen() {
     );
   }
 
-  if (isError) {
+  if (isError && !data) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorTitle}>Couldn’t load posts</Text>
-        <Text style={styles.errorBody}>
-          {error instanceof Error ? error.message : "Unknown error"}
-        </Text>
-      </View>
+      <ErrorState
+        title="Couldn’t load posts"
+        message={error instanceof Error ? error.message : "Unknown error"}
+        onRetry={() => {
+          void refetch();
+        }}
+      />
     );
   }
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefetching}
-          onRefresh={() => {
-            void refetch();
-          }}
-          tintColor={colors.navy}
-        />
-      }
-    >
-      <Text style={styles.brand}>Pat on Sports</Text>
-      <Text style={styles.lede}>Weekly recaps, without the noise.</Text>
+    <View style={styles.screen}>
+      <OfflineIndicator visible={Boolean(isServingFromCache)} />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              void refetch();
+            }}
+            tintColor={colors.navy}
+          />
+        }
+      >
+        <Text style={styles.brand}>Pat on Sports</Text>
+        <Text style={styles.lede}>Weekly recaps, without the noise.</Text>
 
-      <CategoryFilter selected={category} onSelect={setCategory} />
+        {showBanner && manifest.data?.message ? (
+          <ManifestBanner
+            message={manifest.data.message}
+            onDismiss={() => setBannerDismissed(true)}
+          />
+        ) : null}
 
-      {featured ? (
-        <View style={styles.section}>
-          <PostCard post={featured} featured />
-        </View>
-      ) : (
-        <Text style={styles.empty}>No posts in this category yet.</Text>
-      )}
+        <CategoryFilter selected={category} onSelect={setCategory} />
 
-      {rest.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Latest</Text>
-          <View style={styles.stack}>
-            {rest.map((post) => (
-              <PostCard key={post.slug} post={post} />
-            ))}
+        {featured ? (
+          <View style={styles.section}>
+            <PostCard post={featured} featured />
           </View>
-        </View>
-      ) : null}
+        ) : (
+          <Text style={styles.empty}>No posts in this category yet.</Text>
+        )}
 
-      {from2025.length > 0 && category === "All" ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>From the 2025 run</Text>
-          <View style={styles.stack}>
-            {from2025.map((post) => (
-              <PostCard key={post.slug} post={post} />
-            ))}
+        {rest.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Latest</Text>
+            <View style={styles.stack}>
+              {rest.map((post) => (
+                <PostCard key={post.slug} post={post} />
+              ))}
+            </View>
           </View>
-        </View>
-      ) : null}
-    </ScrollView>
+        ) : null}
+
+        {from2025.length > 0 && category === "All" ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>From the 2025 run</Text>
+            <View style={styles.stack}>
+              {from2025.map((post) => (
+                <PostCard key={post.slug} post={post} />
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -149,17 +170,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     padding: 24,
     gap: 8,
-  },
-  errorTitle: {
-    fontFamily: "BarlowCondensed_700Bold",
-    fontSize: 22,
-    color: colors.navy,
-  },
-  errorBody: {
-    fontFamily: "IBMPlexSans_400Regular",
-    fontSize: 14,
-    color: colors.navyMuted,
-    textAlign: "center",
   },
   empty: {
     fontFamily: "IBMPlexSans_400Regular",

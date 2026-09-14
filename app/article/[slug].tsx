@@ -13,18 +13,25 @@ import {
 
 import { ArticleMarkdown } from "@/src/components/ArticleMarkdown";
 import { CategoryChip } from "@/src/components/CategoryChip";
+import { ErrorState } from "@/src/components/ErrorState";
 import { ProsConsCards } from "@/src/components/ProsConsCards";
 import { ScorelineBadge } from "@/src/components/ScorelineBadge";
 import { usePostDetail, usePostsFeed } from "@/src/hooks/usePosts";
 import { canonicalPostUrl } from "@/src/lib/client";
+import { isOfflineUnavailableError } from "@/src/lib/articleCache";
 import { formatDisplayDate, getOpponentTags } from "@/src/lib/format";
 import { colors } from "@/src/theme/colors";
 
 export default function ArticleScreen() {
   const { slug: slugParam } = useLocalSearchParams<{ slug: string | string[] }>();
   const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
-  const { data, isLoading, isError, error } = usePostDetail(slug ?? "");
   const feed = usePostsFeed();
+  const expectedBodyHash =
+    feed.data?.posts.find((post) => post.slug === slug)?.bodyHash ?? null;
+  const { data, isLoading, isError, error, refetch } = usePostDetail(
+    slug ?? "",
+    expectedBodyHash
+  );
 
   const relatedPosts = useMemo(() => {
     if (!data || !feed.data) return [];
@@ -46,11 +53,7 @@ export default function ArticleScreen() {
   };
 
   if (!slug) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorTitle}>Missing article</Text>
-      </View>
-    );
+    return <ErrorState title="Missing article" />;
   }
 
   if (isLoading && !data) {
@@ -62,13 +65,22 @@ export default function ArticleScreen() {
   }
 
   if (isError || !data) {
+    const offline = isOfflineUnavailableError(error);
+    let message = "Unknown error";
+    if (offline) {
+      message =
+        "Connect to the internet once to cache this article, then try again.";
+    } else if (error && typeof error === "object" && "message" in error) {
+      message = String((error as { message: unknown }).message);
+    }
     return (
-      <View style={styles.centered}>
-        <Text style={styles.errorTitle}>Couldn’t load article</Text>
-        <Text style={styles.errorBody}>
-          {error instanceof Error ? error.message : "Unknown error"}
-        </Text>
-      </View>
+      <ErrorState
+        title={offline ? "Not available offline" : "Couldn’t load article"}
+        message={message}
+        onRetry={() => {
+          void refetch();
+        }}
+      />
     );
   }
 
@@ -275,16 +287,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     padding: 24,
     gap: 8,
-  },
-  errorTitle: {
-    fontFamily: "BarlowCondensed_700Bold",
-    fontSize: 22,
-    color: colors.navy,
-  },
-  errorBody: {
-    fontFamily: "IBMPlexSans_400Regular",
-    fontSize: 14,
-    color: colors.navyMuted,
-    textAlign: "center",
   },
 });
