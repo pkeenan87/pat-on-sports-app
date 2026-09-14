@@ -1,30 +1,51 @@
-import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import {
+  BarlowCondensed_600SemiBold,
+  BarlowCondensed_700Bold,
+} from "@expo-google-fonts/barlow-condensed";
+import {
+  IBMPlexSans_400Regular,
+  IBMPlexSans_500Medium,
+  IBMPlexSans_600SemiBold,
+} from "@expo-google-fonts/ibm-plex-sans";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useFonts } from "expo-font";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { useEffect, useState } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import "react-native-reanimated";
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { colors } from "@/src/theme/colors";
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from "expo-router";
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
+  initialRouteName: "(tabs)",
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60_000,
+            retry: 1,
+          },
+        },
+      })
+  );
+
   const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    BarlowCondensed_600SemiBold,
+    BarlowCondensed_700Bold,
+    IBMPlexSans_400Regular,
+    IBMPlexSans_500Medium,
+    IBMPlexSans_600SemiBold,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
@@ -39,18 +60,27 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <Stack
+          screenOptions={{
+            headerTintColor: colors.navy,
+            headerStyle: { backgroundColor: colors.paper },
+            headerTitleStyle: {
+              fontFamily: "BarlowCondensed_700Bold",
+              fontSize: 20,
+            },
+            contentStyle: { backgroundColor: colors.paper },
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="article/[slug]"
+            options={{ title: "Article", headerBackTitle: "Back" }}
+          />
+        </Stack>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }

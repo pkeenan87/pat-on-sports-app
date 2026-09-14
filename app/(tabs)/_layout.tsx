@@ -1,66 +1,98 @@
-import { SymbolView } from 'expo-symbols';
-import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import { SymbolView } from "expo-symbols";
+import { Tabs } from "expo-router";
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import { colors } from "@/src/theme/colors";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
-      }}>
+        tabBarActiveTintColor: colors.red,
+        tabBarInactiveTintColor: colors.navyMuted,
+        tabBarStyle: {
+          backgroundColor: colors.paper,
+          borderTopColor: "rgba(162, 170, 173, 0.45)",
+        },
+        tabBarLabelStyle: {
+          fontFamily: "BarlowCondensed_700Bold",
+          fontSize: 11,
+          letterSpacing: 0.6,
+          textTransform: "uppercase",
+        },
+        headerStyle: { backgroundColor: colors.paper },
+        headerTintColor: colors.navy,
+        headerTitleStyle: {
+          fontFamily: "BarlowCondensed_700Bold",
+          fontSize: 22,
+          letterSpacing: 0.6,
+        },
+        headerShadowVisible: false,
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Tab One',
+          title: "Latest",
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
+                ios: "newspaper",
+                android: "article",
+                web: "article",
               }}
               tintColor={color}
-              size={28}
+              size={24}
             />
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable style={{ marginRight: 15 }}>
-                {({ pressed }) => (
-                  <SymbolView
-                    name={{ ios: 'info.circle', android: 'info', web: 'info' }}
-                    size={25}
-                    tintColor={Colors[colorScheme].text}
-                    style={{ opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
           ),
         }}
       />
       <Tabs.Screen
-        name="two"
+        name="archive"
         options={{
-          title: 'Tab Two',
+          title: "Archive",
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
+                ios: "books.vertical",
+                android: "menu_book",
+                web: "menu_book",
               }}
               tintColor={color}
-              size={28}
+              size={24}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="listen"
+        options={{
+          title: "Listen",
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: "headphones",
+                android: "headphones",
+                web: "headphones",
+              }}
+              tintColor={color}
+              size={24}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="about"
+        options={{
+          title: "About",
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: "info.circle",
+                android: "info",
+                web: "info",
+              }}
+              tintColor={color}
+              size={24}
             />
           ),
         }}
