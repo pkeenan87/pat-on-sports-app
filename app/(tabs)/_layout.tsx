@@ -1,6 +1,6 @@
 import { SymbolView } from "expo-symbols";
 import { Tabs } from "expo-router";
-import { BottomTabBar } from "expo-router/build/react-navigation/bottom-tabs";
+import { BottomTabBar } from "expo-router/tabs";
 import { View } from "react-native";
 
 import { MiniPlayer } from "@/src/components/MiniPlayer";

@@ -1,5 +1,5 @@
 import { NetworkStateType, useNetworkState } from "expo-network";
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -27,6 +27,11 @@ export function AudioDownloadButton({ slug, remoteUrl, onChange }: Props) {
     INITIAL_DOWNLOAD_STATE
   );
   const [hydrated, setHydrated] = useState(false);
+  const onChangeRef = useRef(onChange);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,14 +39,14 @@ export function AudioDownloadButton({ slug, remoteUrl, onChange }: Props) {
       if (cancelled) return;
       if (downloaded) {
         dispatch({ type: "done" });
-        onChange?.(true);
+        onChangeRef.current?.(true);
       }
       setHydrated(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [onChange, slug]);
+  }, [slug]);
 
   const startDownload = useCallback(async () => {
     dispatch({ type: "start" });
@@ -54,15 +59,15 @@ export function AudioDownloadButton({ slug, remoteUrl, onChange }: Props) {
         },
       });
       dispatch({ type: "done" });
-      onChange?.(true);
+      onChangeRef.current?.(true);
     } catch (error) {
       dispatch({
         type: "error",
         message: error instanceof Error ? error.message : "Download failed",
       });
-      onChange?.(false);
+      onChangeRef.current?.(false);
     }
-  }, [onChange, remoteUrl, slug]);
+  }, [remoteUrl, slug]);
 
   const confirmAndDownload = useCallback(async () => {
     const online = isDeviceOnline(network);
@@ -104,12 +109,12 @@ export function AudioDownloadButton({ slug, remoteUrl, onChange }: Props) {
           void (async () => {
             await deleteDownloadedAudio(slug);
             dispatch({ type: "delete" });
-            onChange?.(false);
+            onChangeRef.current?.(false);
           })();
         },
       },
     ]);
-  }, [onChange, slug]);
+  }, [slug]);
 
   if (!hydrated) {
     return <View style={styles.placeholder} />;
@@ -162,9 +167,7 @@ export function AudioDownloadButton({ slug, remoteUrl, onChange }: Props) {
       accessibilityRole="button"
       accessibilityLabel="Download audio"
     >
-      <Text style={styles.buttonLabel}>
-        {state.status === "deleted" ? "Download" : "Download"}
-      </Text>
+      <Text style={styles.buttonLabel}>Download</Text>
     </Pressable>
   );
 }

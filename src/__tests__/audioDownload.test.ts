@@ -33,6 +33,12 @@ describe("reduceDownloadState", () => {
     expect(state.status).toBe("deleted");
   });
 
+  it("keeps the same object when done arrives while already done", () => {
+    const done = reduceDownloadState(INITIAL_DOWNLOAD_STATE, { type: "done" });
+    const again = reduceDownloadState(done, { type: "done" });
+    expect(again).toBe(done);
+  });
+
   it("resets to idle", () => {
     const done = reduceDownloadState(INITIAL_DOWNLOAD_STATE, { type: "done" });
     expect(reduceDownloadState(done, { type: "reset" })).toEqual(

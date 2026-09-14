@@ -37,6 +37,7 @@ export function reduceDownloadState(
       if (state.status !== "downloading") return state;
       return { ...state, progress: action.progress };
     case "done":
+      if (state.status === "done" && state.progress === 1) return state;
       return { status: "done", progress: 1 };
     case "error":
       return {

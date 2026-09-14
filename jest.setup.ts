@@ -36,6 +36,9 @@ jest.mock("expo-image", () => ({
 }));
 
 jest.mock("expo-audio", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Jest mock factory
+  const React = require("react") as typeof import("react");
+
   const status = {
     currentTime: 0,
     duration: 0,
@@ -45,42 +48,71 @@ jest.mock("expo-audio", () => {
     playbackRate: 1,
   };
 
-  const createPlayer = () => {
-    const player = {
-      play: jest.fn(() => {
-        status.playing = true;
-      }),
-      pause: jest.fn(() => {
-        status.playing = false;
-      }),
-      seekTo: jest.fn(async (seconds: number) => {
-        status.currentTime = seconds;
-      }),
-      replace: jest.fn(() => {
-        status.isLoaded = true;
-      }),
-      setPlaybackRate: jest.fn((rate: number) => {
-        status.playbackRate = rate;
-      }),
-      setActiveForLockScreen: jest.fn(),
-      clearLockScreenControls: jest.fn(),
-      updateLockScreenMetadata: jest.fn(),
-      remove: jest.fn(),
-      get currentTime() {
-        return status.currentTime;
-      },
-      get duration() {
-        return status.duration;
-      },
-    };
-    return player;
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) listener();
   };
 
+  const createPlayer = () => ({
+    play: jest.fn(() => {
+      status.playing = true;
+      notify();
+    }),
+    pause: jest.fn(() => {
+      status.playing = false;
+      notify();
+    }),
+    seekTo: jest.fn(async (seconds: number) => {
+      status.currentTime = seconds;
+      notify();
+    }),
+    replace: jest.fn(() => {
+      // Mimic async load: unload, then become ready on the next tick.
+      status.isLoaded = false;
+      status.playing = false;
+      status.currentTime = 0;
+      status.didJustFinish = false;
+      notify();
+      queueMicrotask(() => {
+        status.isLoaded = true;
+        notify();
+      });
+    }),
+    setPlaybackRate: jest.fn((rate: number) => {
+      status.playbackRate = rate;
+      notify();
+    }),
+    setActiveForLockScreen: jest.fn(),
+    clearLockScreenControls: jest.fn(),
+    updateLockScreenMetadata: jest.fn(),
+    remove: jest.fn(),
+    get currentTime() {
+      return status.currentTime;
+    },
+    get duration() {
+      return status.duration;
+    },
+  });
+
+  const player = createPlayer();
+
   return {
-    createAudioPlayer: jest.fn(() => createPlayer()),
-    useAudioPlayer: jest.fn(() => createPlayer()),
-    useAudioPlayerStatus: jest.fn(() => ({ ...status })),
+    createAudioPlayer: jest.fn(() => player),
+    useAudioPlayer: jest.fn(() => player),
+    useAudioPlayerStatus: jest.fn(() => {
+      const [, setTick] = React.useState(0);
+      React.useEffect(() => {
+        const listener = () => setTick((n) => n + 1);
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      }, []);
+      return { ...status };
+    }),
     setAudioModeAsync: jest.fn(async () => undefined),
+    __audioTestStatus: status,
+    __audioTestNotify: notify,
   };
 });
 

@@ -4,7 +4,7 @@ import {
   useAudioPlayerContext,
   type AudioTrack,
 } from "@/src/audio/AudioPlayerProvider";
-import { formatDuration } from "@/src/lib/audioFormat";
+import { formatDuration, SKIP_SECONDS } from "@/src/lib/audioFormat";
 import { colors } from "@/src/theme/colors";
 
 type Props = {
@@ -56,7 +56,9 @@ export function ArticleAudioPlayer({ track }: Props) {
         <Pressable
           onPress={() => {
             if (!isThisTrack) {
-              void loadAndPlay(track).then(() => skipBackward());
+              void loadAndPlay(track, {
+                afterLoadSkipSeconds: -SKIP_SECONDS,
+              });
               return;
             }
             void skipBackward();
@@ -84,7 +86,9 @@ export function ArticleAudioPlayer({ track }: Props) {
         <Pressable
           onPress={() => {
             if (!isThisTrack) {
-              void loadAndPlay(track).then(() => skipForward());
+              void loadAndPlay(track, {
+                afterLoadSkipSeconds: SKIP_SECONDS,
+              });
               return;
             }
             void skipForward();

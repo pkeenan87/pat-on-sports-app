@@ -3,6 +3,7 @@ import {
   useAudioPlayer,
   useAudioPlayerStatus,
 } from "expo-audio";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
@@ -37,6 +38,11 @@ export type AudioTrack = {
   durationSeconds: number | null;
 };
 
+export type LoadAndPlayOptions = {
+  /** Applied after the track loads (and after any resume seek). */
+  afterLoadSkipSeconds?: number;
+};
+
 type AudioPlayerContextValue = {
   track: AudioTrack | null;
   isPlaying: boolean;
@@ -45,7 +51,10 @@ type AudioPlayerContextValue = {
   duration: number;
   playbackSpeed: PlaybackSpeed;
   progress: number;
-  loadAndPlay: (track: AudioTrack) => Promise<void>;
+  loadAndPlay: (
+    track: AudioTrack,
+    options?: LoadAndPlayOptions
+  ) => Promise<void>;
   togglePlayPause: () => Promise<void>;
   pause: () => Promise<void>;
   play: () => Promise<void>;
@@ -57,7 +66,13 @@ type AudioPlayerContextValue = {
 
 const AudioPlayerContext = createContext<AudioPlayerContextValue | null>(null);
 
+function invalidateAudioQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: ["audio", "positions"] });
+  void queryClient.invalidateQueries({ queryKey: ["audio", "continue"] });
+}
+
 export function AudioPlayerProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const player = useAudioPlayer(null, { updateInterval: 500 });
   const status = useAudioPlayerStatus(player);
 
@@ -65,6 +80,13 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
   const lastSavedAtRef = useRef<number | null>(null);
   const finishingRef = useRef(false);
+  const wasPlayingRef = useRef(false);
+  /** Resume position to apply once the replaced source reports loaded. */
+  const pendingResumeRef = useRef<number | null>(null);
+  /** Optional skip after load (article ±15 before a track is active). */
+  const pendingSkipRef = useRef<number | null>(null);
+  /** True while waiting for isLoaded after loadAndPlay. */
+  const pendingStartRef = useRef(false);
 
   useEffect(() => {
     void setAudioModeAsync({
@@ -78,8 +100,9 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     async (slug: string, seconds: number) => {
       await savePosition(slug, seconds);
       lastSavedAtRef.current = seconds;
+      invalidateAudioQueries(queryClient);
     },
-    []
+    [queryClient]
   );
 
   const activateLockScreen = useCallback(
@@ -94,28 +117,75 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   );
 
   const loadAndPlay = useCallback(
-    async (next: AudioTrack) => {
+    async (next: AudioTrack, options?: LoadAndPlayOptions) => {
       finishingRef.current = false;
       const uri = await resolvePlaybackUri(next.slug, next.audioUrl);
       const resumeAt = await getPosition(next.slug);
+
+      pendingResumeRef.current =
+        resumeAt != null && resumeAt > 0 ? resumeAt : null;
+      pendingSkipRef.current =
+        options?.afterLoadSkipSeconds != null
+          ? options.afterLoadSkipSeconds
+          : null;
+      pendingStartRef.current = true;
+      lastSavedAtRef.current = pendingResumeRef.current ?? 0;
 
       player.replace({ uri });
       setTrack(next);
       await setLastPlayedSlug(next.slug);
       activateLockScreen(next);
       player.setPlaybackRate(playbackSpeed);
-
-      if (resumeAt != null && resumeAt > 0) {
-        await player.seekTo(resumeAt);
-        lastSavedAtRef.current = resumeAt;
-      } else {
-        lastSavedAtRef.current = 0;
-      }
-
-      player.play();
+      // Seek + play happen in the isLoaded effect below.
     },
     [activateLockScreen, playbackSpeed, player]
   );
+
+  // Apply resume / post-load skip only after the new source is ready.
+  useEffect(() => {
+    if (!track || !status.isLoaded || !pendingStartRef.current) return;
+
+    pendingStartRef.current = false;
+    const resumeAt = pendingResumeRef.current;
+    pendingResumeRef.current = null;
+    const skipDelta = pendingSkipRef.current;
+    pendingSkipRef.current = null;
+
+    void (async () => {
+      let position = 0;
+      if (resumeAt != null) {
+        await player.seekTo(resumeAt);
+        position = resumeAt;
+        lastSavedAtRef.current = resumeAt;
+      }
+
+      if (skipDelta != null) {
+        const duration = status.duration || track.durationSeconds || 0;
+        const base = resumeAt ?? status.currentTime ?? 0;
+        const next = Math.max(
+          0,
+          Math.min(duration > 0 ? duration : base + skipDelta, base + skipDelta)
+        );
+        await player.seekTo(next);
+        position = next;
+        lastSavedAtRef.current = next;
+      }
+
+      if (resumeAt != null || skipDelta != null) {
+        // Keep storage aligned with where playback actually starts.
+        await persistPosition(track.slug, position);
+      }
+
+      player.play();
+    })();
+  }, [
+    persistPosition,
+    player,
+    status.currentTime,
+    status.duration,
+    status.isLoaded,
+    track,
+  ]);
 
   const pause = useCallback(async () => {
     player.pause();
@@ -182,12 +252,33 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     }
   }, [persistPosition, status.currentTime, status.playing, track]);
 
+  // Cover lock-screen / interruption pauses, not only our pause() control.
+  useEffect(() => {
+    const wasPlaying = wasPlayingRef.current;
+    wasPlayingRef.current = status.playing;
+    if (!wasPlaying || status.playing || !track || status.didJustFinish) {
+      return;
+    }
+    // replace() during loadAndPlay can flip playing off; skip until start finishes.
+    if (pendingStartRef.current) return;
+    void persistPosition(track.slug, status.currentTime);
+  }, [
+    persistPosition,
+    status.currentTime,
+    status.didJustFinish,
+    status.playing,
+    track,
+  ]);
+
   useEffect(() => {
     if (!track || !status.didJustFinish || finishingRef.current) return;
     finishingRef.current = true;
-    void clearPosition(track.slug);
-    lastSavedAtRef.current = null;
-  }, [status.didJustFinish, track]);
+    void (async () => {
+      await clearPosition(track.slug);
+      lastSavedAtRef.current = null;
+      invalidateAudioQueries(queryClient);
+    })();
+  }, [queryClient, status.didJustFinish, track]);
 
   const duration =
     status.duration > 0 ? status.duration : (track?.durationSeconds ?? 0);
