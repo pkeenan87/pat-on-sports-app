@@ -48,8 +48,12 @@ jest.mock("expo-audio", () => {
     playbackRate: 1,
   };
 
+  // Stable snapshot until notify — mirrors real status object identity updates.
+  let statusSnapshot = { ...status };
+
   const listeners = new Set<() => void>();
   const notify = () => {
+    statusSnapshot = { ...status };
     for (const listener of listeners) listener();
   };
 
@@ -67,16 +71,15 @@ jest.mock("expo-audio", () => {
       notify();
     }),
     replace: jest.fn(() => {
-      // Mimic async load: unload, then become ready on the next tick.
-      status.isLoaded = false;
+      // Real player keeps the previous isLoaded until a later status event.
+      // Do not flip isLoaded (or notify a loaded state) synchronously here.
       status.playing = false;
       status.currentTime = 0;
       status.didJustFinish = false;
-      notify();
-      queueMicrotask(() => {
+      setTimeout(() => {
         status.isLoaded = true;
         notify();
-      });
+      }, 0);
     }),
     setPlaybackRate: jest.fn((rate: number) => {
       status.playbackRate = rate;
@@ -108,11 +111,21 @@ jest.mock("expo-audio", () => {
           listeners.delete(listener);
         };
       }, []);
-      return { ...status };
+      return statusSnapshot;
     }),
     setAudioModeAsync: jest.fn(async () => undefined),
     __audioTestStatus: status,
+    __audioTestPlayer: player,
     __audioTestNotify: notify,
+    __audioTestResetStatus: () => {
+      status.currentTime = 0;
+      status.duration = 0;
+      status.playing = false;
+      status.isLoaded = false;
+      status.didJustFinish = false;
+      status.playbackRate = 1;
+      statusSnapshot = { ...status };
+    },
   };
 });
 

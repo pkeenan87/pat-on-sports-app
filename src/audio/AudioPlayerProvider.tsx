@@ -85,8 +85,13 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const pendingResumeRef = useRef<number | null>(null);
   /** Optional skip after load (article ±15 before a track is active). */
   const pendingSkipRef = useRef<number | null>(null);
-  /** True while waiting for isLoaded after loadAndPlay. */
-  const pendingStartRef = useRef(false);
+  /**
+   * Monotonic counter bumped whenever `useAudioPlayerStatus` yields a new
+   * status object. Used to ignore stale isLoaded from a previous track.
+   */
+  const statusSeqRef = useRef(0);
+  /** statusSeq at the moment replace() was called; start once a newer status arrives. */
+  const pendingStartSeqRef = useRef<number | null>(null);
 
   useEffect(() => {
     void setAudioModeAsync({
@@ -95,6 +100,10 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       interruptionMode: "doNotMix",
     });
   }, []);
+
+  useEffect(() => {
+    statusSeqRef.current += 1;
+  }, [status]);
 
   const persistPosition = useCallback(
     async (slug: string, seconds: number) => {
@@ -119,6 +128,11 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const loadAndPlay = useCallback(
     async (next: AudioTrack, options?: LoadAndPlayOptions) => {
       finishingRef.current = false;
+
+      if (track) {
+        await persistPosition(track.slug, player.currentTime);
+      }
+
       const uri = await resolvePlaybackUri(next.slug, next.audioUrl);
       const resumeAt = await getPosition(next.slug);
 
@@ -128,24 +142,27 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         options?.afterLoadSkipSeconds != null
           ? options.afterLoadSkipSeconds
           : null;
-      pendingStartRef.current = true;
       lastSavedAtRef.current = pendingResumeRef.current ?? 0;
 
+      activateLockScreen(next);
+      // Capture seq immediately before replace so we ignore the previous
+      // track's isLoaded until a newer status event arrives.
+      pendingStartSeqRef.current = statusSeqRef.current;
       player.replace({ uri });
       setTrack(next);
       await setLastPlayedSlug(next.slug);
-      activateLockScreen(next);
-      player.setPlaybackRate(playbackSpeed);
-      // Seek + play happen in the isLoaded effect below.
+      // Seek, rate, and play happen in the post-replace loaded effect below.
     },
-    [activateLockScreen, playbackSpeed, player]
+    [activateLockScreen, persistPosition, player, track]
   );
 
-  // Apply resume / post-load skip only after the new source is ready.
+  // Apply resume / post-load skip only after a status event newer than replace.
   useEffect(() => {
-    if (!track || !status.isLoaded || !pendingStartRef.current) return;
+    if (!track || !status.isLoaded) return;
+    if (pendingStartSeqRef.current == null) return;
+    if (statusSeqRef.current <= pendingStartSeqRef.current) return;
 
-    pendingStartRef.current = false;
+    pendingStartSeqRef.current = null;
     const resumeAt = pendingResumeRef.current;
     pendingResumeRef.current = null;
     const skipDelta = pendingSkipRef.current;
@@ -161,7 +178,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
 
       if (skipDelta != null) {
         const duration = status.duration || track.durationSeconds || 0;
-        const base = resumeAt ?? status.currentTime ?? 0;
+        const base = resumeAt ?? 0;
         const next = Math.max(
           0,
           Math.min(duration > 0 ? duration : base + skipDelta, base + skipDelta)
@@ -172,20 +189,13 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       }
 
       if (resumeAt != null || skipDelta != null) {
-        // Keep storage aligned with where playback actually starts.
         await persistPosition(track.slug, position);
       }
 
+      player.setPlaybackRate(playbackSpeed);
       player.play();
     })();
-  }, [
-    persistPosition,
-    player,
-    status.currentTime,
-    status.duration,
-    status.isLoaded,
-    track,
-  ]);
+  }, [persistPosition, playbackSpeed, player, status, track]);
 
   const pause = useCallback(async () => {
     player.pause();
@@ -260,7 +270,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
     // replace() during loadAndPlay can flip playing off; skip until start finishes.
-    if (pendingStartRef.current) return;
+    if (pendingStartSeqRef.current != null) return;
     void persistPosition(track.slug, status.currentTime);
   }, [
     persistPosition,
