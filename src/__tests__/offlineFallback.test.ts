@@ -124,6 +124,21 @@ describe("offline fallback path", () => {
     expect(loaded.bodyHash).toBe("hash-2");
   });
 
+  it("returns cache and does not refetch when bodyHash matches", async () => {
+    await putCachedArticle(detail);
+    const fetchImpl = jest.fn();
+
+    const loaded = await loadPostDetail({
+      slug: detail.slug,
+      expectedBodyHash: "hash-1",
+      isOnline: true,
+      fetchImpl,
+    });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(loaded.markdown).toBe("Body text");
+  });
+
   it("falls back to cache when an online fetch fails", async () => {
     await putCachedArticle(detail);
     const fetchImpl = jest.fn().mockResolvedValue(

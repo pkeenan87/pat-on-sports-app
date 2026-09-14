@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -20,14 +21,53 @@ import {
   type CategoryLabel,
 } from "@/src/lib/format";
 import { shouldShowManifestBanner } from "@/src/lib/manifest";
+import { shouldShowOfflineEmptyState } from "@/src/lib/queryState";
 import { colors } from "@/src/theme/colors";
 
+function bannerStorageKey(message: string): string {
+  // Simple stable key from the message text (not a crypto hash).
+  let hash = 0;
+  for (let i = 0; i < message.length; i += 1) {
+    hash = (hash * 31 + message.charCodeAt(i)) | 0;
+  }
+  return `manifest-banner-dismissed:${hash}`;
+}
+
 export default function LatestScreen() {
-  const { data, isLoading, isError, error, refetch, isRefetching, isServingFromCache } =
-    usePostsFeed();
+  const feed = usePostsFeed();
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+    isServingFromCache,
+    isPending,
+    fetchStatus,
+  } = feed;
   const manifest = useManifest();
   const [category, setCategory] = useState<CategoryLabel | "All">("All");
   const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const bannerMessage = manifest.data?.message?.trim() || null;
+  const bannerKey = useMemo(
+    () => (bannerMessage ? bannerStorageKey(bannerMessage) : null),
+    [bannerMessage]
+  );
+
+  useEffect(() => {
+    if (!bannerKey) return;
+    let cancelled = false;
+    void AsyncStorage.getItem(bannerKey).then((value) => {
+      if (!cancelled && value === "1") {
+        setBannerDismissed(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bannerKey]);
 
   const showBanner =
     Boolean(manifest.data) &&
@@ -46,6 +86,18 @@ export default function LatestScreen() {
       from2025: run2025Pool.filter((post) => post.slug !== heroSlug),
     };
   }, [data?.posts, category]);
+
+  if (shouldShowOfflineEmptyState({ data, isPending, fetchStatus })) {
+    return (
+      <ErrorState
+        title="You’re offline"
+        message="Connect once to download the feed, then you can read cached articles offline."
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
+  }
 
   if (isLoading && !data) {
     return (
@@ -85,10 +137,15 @@ export default function LatestScreen() {
         <Text style={styles.brand}>Pat on Sports</Text>
         <Text style={styles.lede}>Weekly recaps, without the noise.</Text>
 
-        {showBanner && manifest.data?.message ? (
+        {showBanner && bannerMessage ? (
           <ManifestBanner
-            message={manifest.data.message}
-            onDismiss={() => setBannerDismissed(true)}
+            message={bannerMessage}
+            onDismiss={() => {
+              setBannerDismissed(true);
+              if (bannerKey) {
+                void AsyncStorage.setItem(bannerKey, "1");
+              }
+            }}
           />
         ) : null}
 

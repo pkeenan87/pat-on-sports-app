@@ -80,6 +80,7 @@ export async function fetchPostDetail(
  * Load a post detail with SQLite cache and offline fallback.
  * When online, refetch if the feed’s bodyHash differs from the cache (or there
  * is no cache). When offline, serve the cached JSON or throw OfflineUnavailableError.
+ * A matching bodyHash is authoritative — return cache and do not refetch.
  */
 export async function loadPostDetail(options: {
   slug: string;
@@ -91,17 +92,12 @@ export async function loadPostDetail(options: {
   const cached = await getCachedArticle(slug);
   const cachedHash = cached?.bodyHash ?? (await getCachedBodyHash(slug));
   const hashMatches =
-    expectedBodyHash == null ||
-    cachedHash == null ||
+    expectedBodyHash != null &&
+    cachedHash != null &&
     cachedHash === expectedBodyHash;
 
   if (isOnline) {
-    const needsNetwork = !cached || !hashMatches;
-    if (!needsNetwork && cached) {
-      // Still refresh in the background when possible, but return cache now.
-      void fetchPostDetail(slug, fetchImpl)
-        .then((detail) => putCachedArticle(detail))
-        .catch(() => undefined);
+    if (hashMatches && cached) {
       return cached.detail;
     }
     try {

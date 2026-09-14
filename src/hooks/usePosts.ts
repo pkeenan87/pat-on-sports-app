@@ -1,9 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNetworkState } from "expo-network";
 import { useEffect } from "react";
 
 import { fetchManifest, fetchPostsFeed, loadPostDetail } from "../lib/client";
-import { getAllCachedMarkdown } from "../lib/articleCache";
+import {
+  getAllCachedMarkdown,
+  isOfflineUnavailableError,
+} from "../lib/articleCache";
 import { isDeviceOnline, prefetchNewestArticles } from "../lib/prefetch";
 
 export function useNetworkStatus() {
@@ -28,6 +31,7 @@ export function useManifest() {
 
 export function usePostsFeed() {
   const network = useNetworkStatus();
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["posts", "feed"],
     queryFn: () => fetchPostsFeed(),
@@ -40,8 +44,10 @@ export function usePostsFeed() {
     void prefetchNewestArticles(query.data.posts, {
       isOnline: network.isOnline,
       networkType: network.type,
+    }).then(() => {
+      void queryClient.invalidateQueries({ queryKey: ["posts", "cached-bodies"] });
     });
-  }, [query.data?.posts, network.isOnline, network.type]);
+  }, [query.data?.posts, network.isOnline, network.type, queryClient]);
 
   return {
     ...query,
@@ -62,6 +68,10 @@ export function usePostDetail(slug: string, expectedBodyHash?: string | null) {
       }),
     enabled: Boolean(slug),
     networkMode: "offlineFirst",
+    retry: (failureCount, error) => {
+      if (isOfflineUnavailableError(error)) return false;
+      return failureCount < 1;
+    },
   });
 }
 

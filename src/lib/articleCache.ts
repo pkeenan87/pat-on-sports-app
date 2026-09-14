@@ -12,7 +12,13 @@ export class OfflineUnavailableError extends Error {
 export function isOfflineUnavailableError(
   error: unknown
 ): error is OfflineUnavailableError {
-  return error instanceof OfflineUnavailableError;
+  return (
+    error instanceof OfflineUnavailableError ||
+    (typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      (error as { name: unknown }).name === "OfflineUnavailableError")
+  );
 }
 
 export type CachedArticleRow = {
@@ -20,13 +26,6 @@ export type CachedArticleRow = {
   bodyHash: string;
   json: string;
   updatedAt: number;
-};
-
-export type ArticleCacheStore = {
-  get(slug: string): Promise<CachedArticleRow | null>;
-  put(detail: ApiPostDetail): Promise<void>;
-  getAllMarkdown(): Promise<Record<string, string>>;
-  getBodyHash(slug: string): Promise<string | null>;
 };
 
 type DbLike = {
@@ -49,23 +48,28 @@ export function __setOpenDatabaseForTests(open: OpenDatabase | null) {
 async function getDb(): Promise<DbLike> {
   if (!dbPromise) {
     dbPromise = (async () => {
-      const open =
-        openDatabaseImpl ??
-        (async (name: string) => {
-          const SQLite = await import("expo-sqlite");
-          return SQLite.openDatabaseAsync(name) as Promise<DbLike>;
-        });
-      const db = await open("pat-on-sports-articles.db");
-      await db.execAsync(`
-        PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXISTS article_bodies (
-          slug TEXT PRIMARY KEY NOT NULL,
-          body_hash TEXT NOT NULL,
-          json TEXT NOT NULL,
-          updated_at INTEGER NOT NULL
-        );
-      `);
-      return db;
+      try {
+        const open =
+          openDatabaseImpl ??
+          (async (name: string) => {
+            const SQLite = await import("expo-sqlite");
+            return SQLite.openDatabaseAsync(name) as Promise<DbLike>;
+          });
+        const db = await open("pat-on-sports-articles.db");
+        await db.execAsync(`
+          PRAGMA journal_mode = WAL;
+          CREATE TABLE IF NOT EXISTS article_bodies (
+            slug TEXT PRIMARY KEY NOT NULL,
+            body_hash TEXT NOT NULL,
+            json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+        `);
+        return db;
+      } catch (error) {
+        dbPromise = null;
+        throw error;
+      }
     })();
   }
   return dbPromise;

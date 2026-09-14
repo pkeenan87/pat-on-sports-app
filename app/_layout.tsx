@@ -7,6 +7,7 @@ import {
   IBMPlexSans_500Medium,
   IBMPlexSans_600SemiBold,
 } from "@expo-google-fonts/ibm-plex-sans";
+import { useIsRestoring } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -29,6 +30,21 @@ export const unstable_settings = {
 };
 
 SplashScreen.preventAutoHideAsync();
+
+function LoadingScreen() {
+  return (
+    <View
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.paper,
+      }}
+    >
+      <ActivityIndicator color={colors.navy} />
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const [queryClient] = useState(() => createAppQueryClient());
@@ -72,21 +88,15 @@ export default function RootLayout() {
 }
 
 function AppShell() {
+  const isRestoring = useIsRestoring();
   const manifest = useManifest();
 
+  if (isRestoring) {
+    return <LoadingScreen />;
+  }
+
   if (manifest.isLoading && !manifest.data) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: colors.paper,
-        }}
-      >
-        <ActivityIndicator color={colors.navy} />
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
   if (manifest.data && shouldShowUpdateRequired(manifest.data)) {

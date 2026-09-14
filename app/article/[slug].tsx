@@ -28,10 +28,8 @@ export default function ArticleScreen() {
   const feed = usePostsFeed();
   const expectedBodyHash =
     feed.data?.posts.find((post) => post.slug === slug)?.bodyHash ?? null;
-  const { data, isLoading, isError, error, refetch } = usePostDetail(
-    slug ?? "",
-    expectedBodyHash
-  );
+  const { data, isLoading, isError, error, failureReason, refetch } =
+    usePostDetail(slug ?? "", expectedBodyHash);
 
   const relatedPosts = useMemo(() => {
     if (!data || !feed.data) return [];
@@ -65,13 +63,20 @@ export default function ArticleScreen() {
   }
 
   if (isError || !data) {
-    const offline = isOfflineUnavailableError(error);
+    const offlineError = [error, failureReason].find(isOfflineUnavailableError);
+    const offline = Boolean(offlineError);
     let message = "Unknown error";
     if (offline) {
       message =
         "Connect to the internet once to cache this article, then try again.";
     } else if (error && typeof error === "object" && "message" in error) {
       message = String((error as { message: unknown }).message);
+    } else if (
+      failureReason &&
+      typeof failureReason === "object" &&
+      "message" in failureReason
+    ) {
+      message = String((failureReason as { message: unknown }).message);
     }
     return (
       <ErrorState

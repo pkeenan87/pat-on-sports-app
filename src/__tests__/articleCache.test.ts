@@ -98,4 +98,21 @@ describe("article SQLite cache", () => {
     const bodies = await getAllCachedMarkdown();
     expect(bodies[sampleDetail.slug]).toContain("Defense looked solid");
   });
+
+  it("recovers after a failed open so a later open can succeed", async () => {
+    let attempts = 0;
+    __setOpenDatabaseForTests(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error("disk full");
+      }
+      return createMemoryDb();
+    });
+
+    await expect(getCachedArticle("missing")).rejects.toThrow("disk full");
+    await putCachedArticle(sampleDetail);
+    const cached = await getCachedArticle(sampleDetail.slug);
+    expect(cached?.bodyHash).toBe("abc123");
+    expect(attempts).toBe(2);
+  });
 });

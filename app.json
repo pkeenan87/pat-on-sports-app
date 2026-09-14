@@ -8,7 +8,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "patonsports",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "runtimeVersion": {
       "policy": "appVersion"
     },

@@ -18,6 +18,7 @@ import {
   is2025RunPost,
 } from "@/src/lib/format";
 import type { ApiPostSummary } from "@/src/lib/api";
+import { shouldShowOfflineEmptyState } from "@/src/lib/queryState";
 import { colors } from "@/src/theme/colors";
 
 type Row =
@@ -25,8 +26,16 @@ type Row =
   | { type: "post"; key: string; post: ApiPostSummary };
 
 export default function ArchiveScreen() {
-  const { data, isLoading, isError, error, refetch, isServingFromCache } =
-    usePostsFeed();
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isServingFromCache,
+    isPending,
+    fetchStatus,
+  } = usePostsFeed();
   const cachedBodies = useCachedBodies();
   const [query, setQuery] = useState("");
 
@@ -66,6 +75,18 @@ export default function ArchiveScreen() {
 
     return next;
   }, [data?.posts, query, cachedBodies.data]);
+
+  if (shouldShowOfflineEmptyState({ data, isPending, fetchStatus })) {
+    return (
+      <ErrorState
+        title="You’re offline"
+        message="Connect once to download the archive, then you can search cached articles offline."
+        onRetry={() => {
+          void refetch();
+        }}
+      />
+    );
+  }
 
   if (isLoading && !data) {
     return (
