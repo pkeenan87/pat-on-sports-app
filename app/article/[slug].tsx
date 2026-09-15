@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { Link, Stack, useLocalSearchParams } from "expo-router";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -21,6 +21,7 @@ import { usePostDetail, usePostsFeed } from "@/src/hooks/usePosts";
 import { canonicalPostUrl } from "@/src/lib/client";
 import { isOfflineUnavailableError } from "@/src/lib/articleCache";
 import { formatDisplayDate, getOpponentTags } from "@/src/lib/format";
+import { usePushAlerts } from "@/src/push/PushAlertsProvider";
 import { colors } from "@/src/theme/colors";
 
 export default function ArticleScreen() {
@@ -31,6 +32,15 @@ export default function ArticleScreen() {
     feed.data?.posts.find((post) => post.slug === slug)?.bodyHash ?? null;
   const { data, isLoading, isError, error, failureReason, refetch } =
     usePostDetail(slug ?? "", expectedBodyHash);
+  const { recordArticleOpen } = usePushAlerts();
+  const countedSlugRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!data?.slug) return;
+    if (countedSlugRef.current === data.slug) return;
+    countedSlugRef.current = data.slug;
+    void recordArticleOpen();
+  }, [data?.slug, recordArticleOpen]);
 
   const relatedPosts = useMemo(() => {
     if (!data || !feed.data) return [];

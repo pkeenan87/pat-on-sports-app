@@ -22,6 +22,7 @@ import { UpdateRequiredScreen } from "@/src/components/UpdateRequiredScreen";
 import { useManifest } from "@/src/hooks/usePosts";
 import { shouldShowUpdateRequired } from "@/src/lib/manifest";
 import { createAppQueryClient, persistOptions } from "@/src/lib/queryClient";
+import { PushAlertsProvider } from "@/src/push/PushAlertsProvider";
 import { colors } from "@/src/theme/colors";
 
 export { ErrorBoundary } from "expo-router";
@@ -83,7 +84,9 @@ export default function RootLayout() {
         persistOptions={persistOptions}
       >
         <AudioPlayerProvider>
-          <AppShell />
+          <PushAlertsProvider>
+            <AppShell />
+          </PushAlertsProvider>
         </AudioPlayerProvider>
       </PersistQueryClientProvider>
     </GestureHandlerRootView>

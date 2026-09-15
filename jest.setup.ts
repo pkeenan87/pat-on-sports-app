@@ -1,4 +1,5 @@
-// Shared Jest mocks for native modules used by Phase 2 offline + Phase 3 audio.
+// @ts-nocheck
+// Shared Jest mocks for native modules used by Phase 2–4 (offline, audio, push).
 
 jest.mock("@react-native-async-storage/async-storage", () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- Jest mock factory
@@ -192,3 +193,93 @@ jest.mock("expo-file-system", () => {
     },
   };
 });
+
+jest.mock("expo-device", () => {
+  const state = { isDevice: true };
+  return {
+    get isDevice() {
+      return state.isDevice;
+    },
+    __setIsDevice: (value) => {
+      state.isDevice = value;
+    },
+    __resetIsDevice: () => {
+      state.isDevice = true;
+    },
+  };
+});
+
+jest.mock("expo-notifications", () => {
+  const listeners = new Set();
+  let lastResponse = null;
+  let permissionStatus = "undetermined";
+  let canAskAgain = true;
+  let pushToken = "ExponentPushToken[test-token]";
+
+  return {
+    setNotificationHandler: jest.fn(),
+    getPermissionsAsync: jest.fn(async () => ({
+      status: permissionStatus,
+      canAskAgain,
+      granted: permissionStatus === "granted",
+    })),
+    requestPermissionsAsync: jest.fn(async () => {
+      if (canAskAgain) {
+        permissionStatus = "granted";
+      }
+      return {
+        status: permissionStatus,
+        canAskAgain,
+        granted: permissionStatus === "granted",
+      };
+    }),
+    getExpoPushTokenAsync: jest.fn(async () => ({ data: pushToken })),
+    getLastNotificationResponse: jest.fn(() => lastResponse),
+    addNotificationResponseReceivedListener: jest.fn((listener) => {
+      listeners.add(listener);
+      return {
+        remove: () => {
+          listeners.delete(listener);
+        },
+      };
+    }),
+    __pushTestSetDevicePermission: (opts) => {
+      permissionStatus = opts.status;
+      canAskAgain =
+        opts.canAskAgain !== undefined
+          ? opts.canAskAgain
+          : opts.status !== "denied";
+    },
+    __pushTestSetToken: (token) => {
+      pushToken = token;
+    },
+    __pushTestSetLastResponse: (response) => {
+      lastResponse = response;
+    },
+    __pushTestEmitResponse: (response) => {
+      for (const listener of listeners) {
+        listener(response);
+      }
+    },
+    __pushTestReset: () => {
+      listeners.clear();
+      lastResponse = null;
+      permissionStatus = "undetermined";
+      canAskAgain = true;
+      pushToken = "ExponentPushToken[test-token]";
+    },
+  };
+});
+
+jest.mock("expo-constants", () => ({
+  expoConfig: {
+    extra: {
+      eas: {
+        projectId: "ae5408fc-cf1a-471f-9134-bd65dcef4efd",
+      },
+    },
+  },
+  easConfig: {
+    projectId: "ae5408fc-cf1a-471f-9134-bd65dcef4efd",
+  },
+}));

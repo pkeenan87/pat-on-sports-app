@@ -34,7 +34,7 @@ API base: `https://patonsports.com/api/v1/posts.json` and `/api/v1/posts/<slug>.
 | 5 | Comments (after Plan 1) |
 | 6 | Icon, screenshots, App Store Connect, TestFlight, review |
 
-This repo is through **Phase 3** (audio player, downloads, resume). Push, comments, and store assets are later phases.
+This repo is through **Phase 4** (push notification registration and deep links). Comments and store assets are later phases.
 
 ## Brand
 
