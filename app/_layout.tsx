@@ -17,6 +17,7 @@ import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
+import { AudioPlayerProvider } from "@/src/audio/AudioPlayerProvider";
 import { UpdateRequiredScreen } from "@/src/components/UpdateRequiredScreen";
 import { useManifest } from "@/src/hooks/usePosts";
 import { shouldShowUpdateRequired } from "@/src/lib/manifest";
@@ -81,7 +82,9 @@ export default function RootLayout() {
         client={queryClient}
         persistOptions={persistOptions}
       >
-        <AppShell />
+        <AudioPlayerProvider>
+          <AppShell />
+        </AudioPlayerProvider>
       </PersistQueryClientProvider>
     </GestureHandlerRootView>
   );
