@@ -1,6 +1,16 @@
 import * as WebBrowser from "expo-web-browser";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from "react-native";
 
+import { usePushAlerts } from "@/src/push/PushAlertsProvider";
 import { colors } from "@/src/theme/colors";
 
 const LINKS = [
@@ -11,6 +21,27 @@ const LINKS = [
 ] as const;
 
 export default function AboutScreen() {
+  const { alertsEnabled, enableAlerts, disableAlerts } = usePushAlerts();
+  const [toggling, setToggling] = useState(false);
+
+  const onAlertsChange = useCallback(
+    (next: boolean) => {
+      void (async () => {
+        setToggling(true);
+        try {
+          if (next) {
+            await enableAlerts();
+          } else {
+            await disableAlerts();
+          }
+        } finally {
+          setToggling(false);
+        }
+      })();
+    },
+    [enableAlerts, disableAlerts]
+  );
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={styles.eyebrow}>About</Text>
@@ -34,6 +65,28 @@ export default function AboutScreen() {
           Independent commentary. Not affiliated with the NFL, the New England
           Patriots, the NCAA, or UCLA.
         </Text>
+      </View>
+
+      <View style={styles.settings}>
+        <View style={styles.settingRow}>
+          <View style={styles.settingCopy}>
+            <Text style={styles.settingLabel}>New post alerts</Text>
+            <Text style={styles.settingHint}>
+              One notification when a new post is published.
+            </Text>
+          </View>
+          {toggling ? (
+            <ActivityIndicator color={colors.navy} />
+          ) : (
+            <Switch
+              value={alertsEnabled}
+              onValueChange={onAlertsChange}
+              trackColor={{ false: colors.silver, true: colors.navy }}
+              thumbColor={colors.white}
+              accessibilityLabel="New post alerts"
+            />
+          )}
+        </View>
       </View>
 
       <View style={styles.links}>
@@ -85,6 +138,38 @@ const styles = StyleSheet.create({
     fontFamily: "IBMPlexSans_400Regular",
     fontSize: 17,
     lineHeight: 28,
+    color: colors.navyMuted,
+  },
+  settings: {
+    marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(162, 170, 173, 0.55)",
+    paddingTop: 4,
+  },
+  settingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(162, 170, 173, 0.45)",
+  },
+  settingCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  settingLabel: {
+    fontFamily: "BarlowCondensed_700Bold",
+    fontSize: 18,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: colors.navy,
+  },
+  settingHint: {
+    fontFamily: "IBMPlexSans_400Regular",
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.navyMuted,
   },
   links: {

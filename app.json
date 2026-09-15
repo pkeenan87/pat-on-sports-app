@@ -62,7 +62,8 @@
           "enableBackgroundPlayback": true,
           "enableMicrophonePermission": false
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true
