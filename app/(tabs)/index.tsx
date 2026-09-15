@@ -16,11 +16,7 @@ import { ManifestBanner } from "@/src/components/ManifestBanner";
 import { OfflineIndicator } from "@/src/components/OfflineIndicator";
 import { PostCard } from "@/src/components/PostCard";
 import { useManifest, usePostsFeed } from "@/src/hooks/usePosts";
-import {
-  filterPostsByCategory,
-  is2025RunPost,
-  type CategoryLabel,
-} from "@/src/lib/format";
+import { buildLatestSections, type CategoryLabel } from "@/src/lib/format";
 import { shouldShowManifestBanner } from "@/src/lib/manifest";
 import { shouldShowOfflineEmptyState } from "@/src/lib/queryState";
 import { colors } from "@/src/theme/colors";
@@ -75,18 +71,10 @@ export default function LatestScreen() {
     shouldShowManifestBanner(manifest.data!) &&
     !bannerDismissed;
 
-  const { featured, rest, from2025 } = useMemo(() => {
-    const posts = filterPostsByCategory(data?.posts ?? [], category);
-    const latestPool = posts.filter((post) => !is2025RunPost(post));
-    const run2025Pool = posts.filter(is2025RunPost);
-    const lead = latestPool[0] ?? posts[0];
-    const heroSlug = lead?.slug;
-    return {
-      featured: lead,
-      rest: latestPool.filter((post) => post.slug !== heroSlug),
-      from2025: run2025Pool.filter((post) => post.slug !== heroSlug),
-    };
-  }, [data?.posts, category]);
+  const { featured, rest, from2025 } = useMemo(
+    () => buildLatestSections(data?.posts ?? [], category),
+    [data?.posts, category]
+  );
 
   if (shouldShowOfflineEmptyState({ data, isPending, fetchStatus })) {
     return (

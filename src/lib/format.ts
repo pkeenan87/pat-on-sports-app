@@ -104,3 +104,32 @@ export function filterPostsByCategory(
   if (category === "All") return posts;
   return posts.filter((post) => post.category.label === category);
 }
+
+export type LatestSections = {
+  featured: ApiPostSummary | undefined;
+  rest: ApiPostSummary[];
+  from2025: ApiPostSummary[];
+};
+
+/**
+ * Sections for the Latest tab. With "All" selected, 2025-run recaps move to
+ * their own shelf. With a category selected, every matching post stays in the
+ * main list, otherwise a filter such as Pros & Cons would hide the entire
+ * 2025 season.
+ */
+export function buildLatestSections(
+  allPosts: ApiPostSummary[],
+  category: CategoryLabel | "All"
+): LatestSections {
+  const posts = filterPostsByCategory(allPosts, category);
+  const splitRun = category === "All";
+  const latestPool = splitRun ? posts.filter((post) => !is2025RunPost(post)) : posts;
+  const run2025Pool = splitRun ? posts.filter(is2025RunPost) : [];
+  const lead = latestPool[0] ?? posts[0];
+  const heroSlug = lead?.slug;
+  return {
+    featured: lead,
+    rest: latestPool.filter((post) => post.slug !== heroSlug),
+    from2025: run2025Pool.filter((post) => post.slug !== heroSlug),
+  };
+}
