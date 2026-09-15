@@ -19,7 +19,7 @@ export function PostCard({ post, featured = false }: Props) {
   return (
     <Link href={`/article/${post.slug}`} asChild>
       <Pressable
-        style={[styles.card, featured && styles.featured]}
+        style={StyleSheet.flatten([styles.card, featured && styles.featured])}
         accessibilityRole="button"
         accessibilityLabel={post.title}
       >
