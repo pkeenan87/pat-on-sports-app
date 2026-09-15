@@ -2,11 +2,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Linking } from "react-native";
 
 import {
+  getAlertsEnabled,
+  getStoredPushToken,
   setAlertsEnabled,
   setStoredPushToken,
 } from "../lib/pushPrefs";
 import {
   disablePushAlerts,
+  refreshPushRegistrationIfEnabled,
   registerForPushAlerts,
 } from "../lib/pushRegister";
 
@@ -112,5 +115,22 @@ describe("push registration client", () => {
     await setAlertsEnabled(true);
     await disablePushAlerts({ fetchImpl });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("clears alerts and token when permission was revoked in Settings", async () => {
+    await setAlertsEnabled(true);
+    await setStoredPushToken("ExponentPushToken[test-token]");
+    notificationsMock().__pushTestSetDevicePermission({
+      status: "denied",
+      canAskAgain: false,
+    });
+    const fetchImpl = jest.fn();
+
+    const result = await refreshPushRegistrationIfEnabled({ fetchImpl });
+
+    expect(result.ok).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(await getAlertsEnabled()).toBe(false);
+    expect(await getStoredPushToken()).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import * as Notifications from "expo-notifications";
-import { router } from "expo-router";
+import { router, useRootNavigationState } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import {
   createContext,
@@ -11,7 +11,11 @@ import {
   type ReactNode,
 } from "react";
 
-import { routeFromNotificationData } from "@/src/lib/notificationRoute";
+import { PushExplainerModal } from "@/src/components/PushExplainerModal";
+import {
+  routeFromNotificationData,
+  type NotificationRoute,
+} from "@/src/lib/notificationRoute";
 import {
   getAlertsEnabled,
   recordArticleOpenAndShouldPrompt,
@@ -22,8 +26,6 @@ import {
   refreshPushRegistrationIfEnabled,
   registerForPushAlerts,
 } from "@/src/lib/pushRegister";
-
-import { PushExplainerModal } from "@/src/components/PushExplainerModal";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -53,10 +55,13 @@ function notificationData(
   return undefined;
 }
 
-export function navigateFromNotification(
+function routeFromNotification(
   notification: Notifications.Notification
-): void {
-  const route = routeFromNotificationData(notificationData(notification));
+): NotificationRoute {
+  return routeFromNotificationData(notificationData(notification));
+}
+
+function performNotificationRoute(route: NotificationRoute): void {
   if (route.type === "article") {
     router.push(`/article/${route.slug}`);
     return;
@@ -69,6 +74,10 @@ export function navigateFromNotification(
 export function PushAlertsProvider({ children }: { children: ReactNode }) {
   const [alertsEnabled, setAlertsEnabledState] = useState(false);
   const [explainerVisible, setExplainerVisible] = useState(false);
+  const [pendingRoute, setPendingRoute] = useState<NotificationRoute | null>(
+    null
+  );
+  const rootState = useRootNavigationState();
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +85,9 @@ export function PushAlertsProvider({ children }: { children: ReactNode }) {
       const enabled = await getAlertsEnabled();
       if (!cancelled) setAlertsEnabledState(enabled);
       await refreshPushRegistrationIfEnabled();
+      if (!cancelled) {
+        setAlertsEnabledState(await getAlertsEnabled());
+      }
     })();
     return () => {
       cancelled = true;
@@ -83,20 +95,39 @@ export function PushAlertsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const queue = (notification: Notifications.Notification) => {
+      const route = routeFromNotification(notification);
+      if (route.type !== "none") {
+        setPendingRoute(route);
+      }
+    };
+
     const last = Notifications.getLastNotificationResponse();
     if (last?.notification) {
-      navigateFromNotification(last.notification);
+      queue(last.notification);
     }
 
     const subscription =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        navigateFromNotification(response.notification);
+        queue(response.notification);
       });
 
     return () => {
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!rootState?.key || !pendingRoute) return;
+    const route = pendingRoute;
+    performNotificationRoute(route);
+    const clear = setTimeout(() => {
+      setPendingRoute((current) => (current === route ? null : current));
+    }, 0);
+    return () => {
+      clearTimeout(clear);
+    };
+  }, [rootState?.key, pendingRoute]);
 
   const recordArticleOpen = useCallback(async () => {
     const shouldPrompt = await recordArticleOpenAndShouldPrompt();

@@ -88,6 +88,24 @@ export async function refreshPushRegistrationIfEnabled(options?: {
   if (!enabled) {
     return { ok: false, reason: "Alerts not enabled" };
   }
+
+  if (!Device.isDevice) {
+    const reason =
+      "Skipping push registration: not a physical device (simulator)";
+    console.log(reason);
+    return { ok: false, reason };
+  }
+
+  const existing = await Notifications.getPermissionsAsync();
+  if (existing.status !== "granted") {
+    await setAlertsEnabled(false);
+    await clearStoredPushToken();
+    return {
+      ok: false,
+      reason: `Permission not granted (${existing.status}); alerts disabled`,
+    };
+  }
+
   return registerForPushAlerts({
     openSettingsIfDenied: false,
     fetchImpl: options?.fetchImpl,
